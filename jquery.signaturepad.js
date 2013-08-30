@@ -941,7 +941,7 @@ $.fn.signaturePad.defaults = {
   , onFormError : null // Pass a callback to be used instead of the built-in function
   , onDraw : null // Pass a callback to be used to capture the drawing process
   , onDrawEnd : null // Pass a callback to be exectued after the drawing process
-  , compress : true // compress output using base62encode with '-' and ':' as separators
+  , compress : false // compress output using base62encode with '-' and ':' as separators
 }
 
 }(jQuery))
