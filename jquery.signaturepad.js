@@ -77,13 +77,11 @@ function SignaturePad (selector, options) {
 
   /**
    * An array holding all the points and lines to generate the signature
-   * Each item is an object like:
-   * {
+   * Each item is an array containing the four elements:
    *   mx: moveTo x coordinate
    *   my: moveTo y coordinate
    *   lx: lineTo x coordinate
    *   lx: lineTo y coordinate
-   * }
    *
    * @private
    *
@@ -216,12 +214,7 @@ function SignaturePad (selector, options) {
     canvasContext.stroke()
     canvasContext.closePath()
 
-    output.push({
-      'lx' : newX
-      , 'ly' : newY
-      , 'mx' : previous.x
-      , 'my' : previous.y
-    })
+    output.push([newX, newY, previous.x, previous.y])
 
     previous.x = newX
     previous.y = newY
@@ -229,6 +222,75 @@ function SignaturePad (selector, options) {
     if (settings.onDraw && typeof settings.onDraw === 'function')
       settings.onDraw.apply(self)
   }
+
+  function base62encode (a,b,c) {
+    for (a=a!==+a||a%1?-1:a,b="";a>=0;a=Math.floor(a/62)||-1)
+      b=String.fromCharCode(((c=a%62)>9?c>35?29:87:48)+c)+b
+
+    return b
+  }
+
+  function base62decode (a,b,c,d) {
+    for (b=c=(a===(/\W|_|^$/.test(a+="")||a))-1;d=a.charCodeAt(c++);)
+      b=b*62+d-[,48,29,87][d>>5]
+
+    return b
+  }
+
+  /**
+   * Converts [ [n, m, p, q], [r, s, t, u] ] to
+   * "A:B:C:D-E:F:G:H" in order to reduce the size
+   * of the string returned by the sigpad.  The number
+   * translation (ie. n -> A) is through base62 encoding.
+   */
+  function compress () {
+    var paths = [], current, path, i
+    for (path in output) {
+      path = output[path]
+      if (typeof path == 'object') {
+        current = ''
+        for (i in path) {
+          current += base62encode(path[i]) + '#'
+        }
+
+        current = current.substring(0, current.length - 1)
+
+        paths.push(current)
+      }
+    }
+
+    return paths.join('!')
+  }
+
+  function decompress (src) {
+    var paths = [], current = '', path = [], i, l, c
+    for (i = 0, l = src.length; i < l; i++) {
+      c = src.substr(i, 1)
+      switch(c) {
+
+      case '#':
+        path.push(base62decode(current))
+        current = ''
+        break;
+
+      case '!':
+        path.push(base62decode(current))
+        paths.push(path)
+        path = []
+        current = ''
+        break
+
+      default:
+        current += c
+      }
+    }
+
+    path.push(base62decode(current))
+    paths.push(path)
+
+    return paths
+  }
+
 
   /**
    * Callback registered to mouse/touch events of the canvas
@@ -257,8 +319,19 @@ function SignaturePad (selector, options) {
     previous.x = null
     previous.y = null
 
-    if (settings.output && output.length > 0)
-      $(settings.output, context).val(JSON.stringify(output))
+    outputDrawing()
+  }
+
+  function outputDrawing() {
+    var val, elem = settings.output && $(settings.output, context)
+    if (elem && elem.length > 0) {
+      if (settings.compress) {
+        val = compress(output)
+      } else {
+        val = JSON.stringify(output)
+      }
+      elem.val(val)
+    }
   }
 
   /**
@@ -607,23 +680,22 @@ function SignaturePad (selector, options) {
    * @param {Boolean} saveOutput whether to write the path to the output array or not
    */
   function drawSignature (paths, context, saveOutput) {
-    for(var i in paths) {
-      if (typeof paths[i] === 'object') {
+    var path, i, lx, ly, mx, my;
+    for(i in paths) {
+      path = paths[i]
+      if (typeof path === 'object') {
+        lx = path[0]
+        ly = path[1]
+        mx = path[2]
+        my = path[3]
         context.beginPath()
-        context.moveTo(paths[i].mx, paths[i].my)
-        context.lineTo(paths[i].lx, paths[i].ly)
+        context.moveTo(mx, my)
+        context.lineTo(lx, ly)
         context.lineCap = settings.penCap
         context.stroke()
         context.closePath()
 
-        if (saveOutput) {
-          output.push({
-            'lx' : paths[i].lx
-            , 'ly' : paths[i].ly
-            , 'mx' : paths[i].mx
-            , 'my' : paths[i].my
-          })
-        }
+        if (saveOutput) output.push(path)
       }
     }
   }
@@ -722,11 +794,17 @@ function SignaturePad (selector, options) {
       self.clearCanvas()
       $(settings.typed, context).hide()
 
-      if (typeof paths === 'string')
-        paths = JSON.parse(paths)
+      if (typeof paths === 'string') {
+        if (settings.compress) {
+          paths = decompress(paths)
+        } else {
+          paths = JSON.parse(paths)
+        }
+      }
 
       drawSignature(paths, canvasContext, true)
 
+      outputDrawing()
       if (settings.output && $(settings.output, context).length > 0)
         $(settings.output, context).val(JSON.stringify(output))
     }
@@ -806,6 +884,7 @@ function SignaturePad (selector, options) {
  *
  * @return {Object} The Api for controlling the instance
  */
+console.log("Signing")
 $.fn.signaturePad = function (options) {
   var api = null
 
@@ -822,6 +901,8 @@ $.fn.signaturePad = function (options) {
 
   return api
 }
+ 
+
 
 /**
  * Expose the defaults so they can be overwritten for multiple instances
@@ -860,6 +941,7 @@ $.fn.signaturePad.defaults = {
   , onFormError : null // Pass a callback to be used instead of the built-in function
   , onDraw : null // Pass a callback to be used to capture the drawing process
   , onDrawEnd : null // Pass a callback to be exectued after the drawing process
+  , compress : true // compress output using base62encode with '-' and ':' as separators
 }
 
 }(jQuery))
