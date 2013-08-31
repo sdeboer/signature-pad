@@ -214,7 +214,12 @@ function SignaturePad (selector, options) {
     canvasContext.stroke()
     canvasContext.closePath()
 
-    output.push([newX, newY, previous.x, previous.y])
+    output.push({
+        lx: newX
+        , ly: newY
+        , mx: previous.x
+        , my: previous.y
+    })
 
     previous.x = newX
     previous.y = newY
@@ -223,74 +228,45 @@ function SignaturePad (selector, options) {
       settings.onDraw.apply(self)
   }
 
-  function base62encode (a,b,c) {
-    for (a=a!==+a||a%1?-1:a,b="";a>=0;a=Math.floor(a/62)||-1)
-      b=String.fromCharCode(((c=a%62)>9?c>35?29:87:48)+c)+b
-
-    return b
-  }
-
-  function base62decode (a,b,c,d) {
-    for (b=c=(a===(/\W|_|^$/.test(a+="")||a))-1;d=a.charCodeAt(c++);)
-      b=b*62+d-[,48,29,87][d>>5]
-
-    return b
-  }
-
   /**
-   * Converts [ [n, m, p, q], [r, s, t, u] ] to
-   * "A:B:C:D-E:F:G:H" in order to reduce the size
-   * of the string returned by the sigpad.  The number
-   * translation (ie. n -> A) is through base62 encoding.
    */
   function compress () {
-    var paths = [], current, path, i
+    var paths = '', path
     for (path in output) {
       path = output[path]
       if (typeof path == 'object') {
-        current = ''
-        for (i in path) {
-          current += base62encode(path[i]) + '#'
-        }
-
-        current = current.substring(0, current.length - 1)
-
-        paths.push(current)
+        paths = paths
+        + convertToCharCode(path.lx)
+        + convertToCharCode(path.ly)
+        + convertToCharCode(path.mx)
+        + convertToCharCode(path.my)
       }
     }
-
-    return paths.join('!')
-  }
-
-  function decompress (src) {
-    var paths = [], current = '', path = [], i, l, c
-    for (i = 0, l = src.length; i < l; i++) {
-      c = src.substr(i, 1)
-      switch(c) {
-
-      case '#':
-        path.push(base62decode(current))
-        current = ''
-        break;
-
-      case '!':
-        path.push(base62decode(current))
-        paths.push(path)
-        path = []
-        current = ''
-        break
-
-      default:
-        current += c
-      }
-    }
-
-    path.push(base62decode(current))
-    paths.push(path)
 
     return paths
   }
 
+  function decompress (src) {
+    var paths = [], i, l = src.length
+
+    for (i = 0, l = src.length; i < l; i = i + 4) {
+      paths.push({
+          lx: convertFromCharCode(src, i)
+          , ly: convertFromCharCode(src, i + 1)
+          , mx: convertFromCharCode(src, i + 2)
+          , my: convertFromCharCode(src, i + 3)
+      })
+    }
+    return paths
+  }
+
+  function convertToCharCode(num) {
+    return String.fromCharCode( parseInt(num.toString(), 10) + 65)
+  }
+
+  function convertFromCharCode(str, pos) {
+    return str.charCodeAt(pos) - 65
+  }
 
   /**
    * Callback registered to mouse/touch events of the canvas
@@ -476,12 +452,12 @@ function SignaturePad (selector, options) {
       canvas.bind('mouseleave.signaturepad', function (e) {
         if (mouseButtonDown) stopDrawing(e)
 
-        if (mouseButtonDown && !mouseLeaveTimeout) {
-          mouseLeaveTimeout = setTimeout(function () {
-            stopDrawing()
-            clearMouseLeaveTimeout()
-          }, 500)
-        }
+          if (mouseButtonDown && !mouseLeaveTimeout) {
+            mouseLeaveTimeout = setTimeout(function () {
+              stopDrawing()
+              clearMouseLeaveTimeout()
+            }, 500)
+          }
       })
 
       canvas.each(function () {
@@ -569,9 +545,9 @@ function SignaturePad (selector, options) {
    */
   function type (val) {
     var typed = $(settings.typed, context)
-      , cleanedVal = val.replace(/>/g, '&gt;').replace(/</g, '&lt;').trim()
-      , oldLength = typeItNumChars
-      , edgeOffset = typeItCurrentFontSize * 0.5
+    , cleanedVal = val.replace(/>/g, '&gt;').replace(/</g, '&lt;').trim()
+    , oldLength = typeItNumChars
+    , edgeOffset = typeItCurrentFontSize * 0.5
 
     typeItNumChars = cleanedVal.length
     typed.html(cleanedVal)
@@ -591,7 +567,7 @@ function SignaturePad (selector, options) {
     if (typeItNumChars < oldLength && typed.outerWidth() + edgeOffset < element.width && typeItCurrentFontSize < typeItDefaultFontSize) {
       while (typed.outerWidth() + edgeOffset < element.width && typeItCurrentFontSize < typeItDefaultFontSize) {
         typeItCurrentFontSize++
-        typed.css('font-size', typeItCurrentFontSize + 'px')
+          typed.css('font-size', typeItCurrentFontSize + 'px')
       }
     }
   }
@@ -641,9 +617,9 @@ function SignaturePad (selector, options) {
    */
   function validateForm () {
     var valid = true
-      , errors = {drawInvalid: false, nameInvalid: false}
-      , onBeforeArguments = [context, settings]
-      , onErrorArguments = [errors, context, settings]
+    , errors = {drawInvalid: false, nameInvalid: false}
+    , onBeforeArguments = [context, settings]
+    , onErrorArguments = [errors, context, settings]
 
     if (settings.onBeforeValidate && typeof settings.onBeforeValidate === 'function') {
       settings.onBeforeValidate.apply(self,onBeforeArguments)
@@ -680,17 +656,13 @@ function SignaturePad (selector, options) {
    * @param {Boolean} saveOutput whether to write the path to the output array or not
    */
   function drawSignature (paths, context, saveOutput) {
-    var path, i, lx, ly, mx, my;
+    var path, i
     for(i in paths) {
       path = paths[i]
       if (typeof path === 'object') {
-        lx = path[0]
-        ly = path[1]
-        mx = path[2]
-        my = path[3]
         context.beginPath()
-        context.moveTo(mx, my)
-        context.lineTo(lx, ly)
+        context.moveTo(path.mx, path.my)
+        context.lineTo(path.lx, path.ly)
         context.lineCap = settings.penCap
         context.stroke()
         context.closePath()
@@ -711,14 +683,14 @@ function SignaturePad (selector, options) {
     // https://gist.github.com/661844
     // http://bugs.jquery.com/ticket/6446
     if (parseFloat(((/CPU.+OS ([0-9_]{3}).*AppleWebkit.*Mobile/i.exec(navigator.userAgent)) || [0,'4_2'])[1].replace('_','.')) < 4.1) {
-       $.fn.Oldoffset = $.fn.offset;
-       $.fn.offset = function () {
-          var result = $(this).Oldoffset()
-          result.top -= window.scrollY
-          result.left -= window.scrollX
+      $.fn.Oldoffset = $.fn.offset;
+      $.fn.offset = function () {
+        var result = $(this).Oldoffset()
+        result.top -= window.scrollY
+        result.left -= window.scrollX
 
-          return result
-       }
+        return result
+      }
     }
 
     // Disable selection on the typed div and canvas
@@ -769,179 +741,178 @@ function SignaturePad (selector, options) {
   }
 
   $.extend(self, {
-    /**
-     * Initializes SignaturePad
-     */
-    init : function () { init() }
+      /**
+       * Initializes SignaturePad
+       */
+      init : function () { init() }
 
-    /**
-     * Allows options to be updated after initialization
-     *
-     * @param {Object} options An object containing the options to be changed
-     */
-    , updateOptions : function (options) {
-      $.extend(settings, options)
-    }
-
-    /**
-     * Regenerates a signature on the canvas using an array of objects
-     * Follows same format as object property
-     * @see var object
-     *
-     * @param {Array} paths An array of the lines and points
-     */
-    , regenerate : function (paths) {
-      self.clearCanvas()
-      $(settings.typed, context).hide()
-
-      if (typeof paths === 'string') {
-        if (settings.compress) {
-          paths = decompress(paths)
-        } else {
-          paths = JSON.parse(paths)
-        }
+      /**
+       * Allows options to be updated after initialization
+       *
+       * @param {Object} options An object containing the options to be changed
+       */
+      , updateOptions : function (options) {
+        $.extend(settings, options)
       }
 
-      drawSignature(paths, canvasContext, true)
+      /**
+       * Regenerates a signature on the canvas using an array of objects
+       * Follows same format as object property
+       * @see var object
+       *
+       * @param {Array} paths An array of the lines and points
+       */
+      , regenerate : function (paths) {
+        self.clearCanvas()
+        $(settings.typed, context).hide()
 
-      outputDrawing()
-      if (settings.output && $(settings.output, context).length > 0)
-        $(settings.output, context).val(JSON.stringify(output))
-    }
+        if (typeof paths === 'string') {
+          if (settings.compress) {
+            paths = decompress(paths)
+          } else {
+            paths = JSON.parse(paths)
+          }
+        }
 
-    /**
-     * Clears the canvas
-     * Redraws the background colour and the signature line
-     */
-    , clearCanvas : function () { clearCanvas() }
+        drawSignature(paths, canvasContext, true)
 
-    /**
-     * Returns the signature as a Js array
-     *
-     * @return {Array}
-     */
-    , getSignature : function () { return output }
+        outputDrawing()
+        if (settings.output && $(settings.output, context).length > 0)
+          $(settings.output, context).val(JSON.stringify(output))
+      }
 
-    /**
-     * Returns the signature as a Json string
-     *
-     * @return {String}
-     */
-    , getSignatureString : function () { return JSON.stringify(output) }
+      /**
+       * Clears the canvas
+       * Redraws the background colour and the signature line
+       */
+      , clearCanvas : function () { clearCanvas() }
 
-    /**
-     * Returns the signature as an image
-     * Re-draws the signature in a shadow canvas to create a clean version
-     *
-     * @return {String}
-     */
-    , getSignatureImage : function () {
-      var tmpCanvas = document.createElement('canvas')
+      /**
+       * Returns the signature as a Js array
+       *
+       * @return {Array}
+       */
+      , getSignature : function () { return output }
+
+      /**
+       * Returns the signature as a Json string
+       *
+       * @return {String}
+       */
+      , getSignatureString : function () { return JSON.stringify(output) }
+
+      /**
+       * Returns the signature as an image
+       * Re-draws the signature in a shadow canvas to create a clean version
+       *
+       * @return {String}
+       */
+      , getSignatureImage : function () {
+        var tmpCanvas = document.createElement('canvas')
         , tmpContext = null
         , data = null
 
-      tmpCanvas.style.position = 'absolute'
-      tmpCanvas.style.top = '-999em'
-      tmpCanvas.width = element.width
-      tmpCanvas.height = element.height
-      document.body.appendChild(tmpCanvas)
+        tmpCanvas.style.position = 'absolute'
+        tmpCanvas.style.top = '-999em'
+        tmpCanvas.width = element.width
+        tmpCanvas.height = element.height
+        document.body.appendChild(tmpCanvas)
 
-      if (!tmpCanvas.getContext && FlashCanvas)
-        FlashCanvas.initElement(tmpCanvas)
+        if (!tmpCanvas.getContext && FlashCanvas)
+          FlashCanvas.initElement(tmpCanvas)
 
-      tmpContext = tmpCanvas.getContext('2d')
+        tmpContext = tmpCanvas.getContext('2d')
 
-      tmpContext.fillStyle = settings.bgColour
-      tmpContext.fillRect(0, 0, element.width, element.height)
-      tmpContext.lineWidth = settings.penWidth
-      tmpContext.strokeStyle = settings.penColour
+        tmpContext.fillStyle = settings.bgColour
+        tmpContext.fillRect(0, 0, element.width, element.height)
+        tmpContext.lineWidth = settings.penWidth
+        tmpContext.strokeStyle = settings.penColour
 
-      drawSignature(output, tmpContext)
-      data = tmpCanvas.toDataURL.apply(tmpCanvas, arguments)
+        drawSignature(output, tmpContext)
+        data = tmpCanvas.toDataURL.apply(tmpCanvas, arguments)
 
-      document.body.removeChild(tmpCanvas)
-      tmpCanvas = null
+        document.body.removeChild(tmpCanvas)
+        tmpCanvas = null
 
-      return data
-    }
+        return data
+      }
 
-    /**
-     * The form validation function
-     * Validates that the signature has been filled in properly
-     * Allows it to be hooked into another validation function and called at a different time
-     *
-     * @return {Boolean}
-     */
-    , validateForm : function () { return validateForm() }
+      /**
+       * The form validation function
+       * Validates that the signature has been filled in properly
+       * Allows it to be hooked into another validation function and called at a different time
+       *
+       * @return {Boolean}
+       */
+      , validateForm : function () { return validateForm() }
   })
-}
+  }
 
-/**
- * Create the plugin
- * Returns an Api which can be used to call specific methods
- *
- * @param {Object} options The options array
- *
- * @return {Object} The Api for controlling the instance
- */
-console.log("Signing")
-$.fn.signaturePad = function (options) {
-  var api = null
+  /**
+   * Create the plugin
+   * Returns an Api which can be used to call specific methods
+   *
+   * @param {Object} options The options array
+   *
+   * @return {Object} The Api for controlling the instance
+   */
+  $.fn.signaturePad = function (options) {
+    var api = null
 
-  this.each(function () {
-    if (!$.data(this, 'plugin-signaturePad')) {
-      api = new SignaturePad(this, options)
-      api.init()
-      $.data(this, 'plugin-signaturePad', api)
-    } else {
-      api = $.data(this, 'plugin-signaturePad')
-      api.updateOptions(options)
-    }
-  })
+    this.each(function () {
+      if (!$.data(this, 'plugin-signaturePad')) {
+        api = new SignaturePad(this, options)
+        api.init()
+        $.data(this, 'plugin-signaturePad', api)
+      } else {
+        api = $.data(this, 'plugin-signaturePad')
+        api.updateOptions(options)
+      }
+    })
 
-  return api
-}
- 
+    return api
+  }
 
 
-/**
- * Expose the defaults so they can be overwritten for multiple instances
- *
- * @type {Object}
- */
-$.fn.signaturePad.defaults = {
-  defaultAction : 'typeIt' // What action should be highlighted first: typeIt or drawIt
-  , displayOnly : false // Initialize canvas for signature display only; ignore buttons and inputs
-  , drawOnly : false // Whether the to allow a typed signature or not
-  , canvas : 'canvas' // Selector for selecting the canvas element
-  , sig : '.sig' // Parts of the signature form that require Javascript (hidden by default)
-  , sigNav : '.sigNav' // The TypeIt/DrawIt navigation (hidden by default)
-  , bgColour : '#ffffff' // The colour fill for the background of the canvas; or transparent
-  , penColour : '#145394' // Colour of the drawing ink
-  , penWidth : 2 // Thickness of the pen
-  , penCap : 'round' // Determines how the end points of each line are drawn (values: 'butt', 'round', 'square')
-  , lineColour : '#ccc' // Colour of the signature line
-  , lineWidth : 2 // Thickness of the signature line
-  , lineMargin : 5 // Margin on right and left of signature line
-  , lineTop : 35 // Distance to draw the line from the top
-  , name : '.name' // The input field for typing a name
-  , typed : '.typed' // The Html element to accept the printed name
-  , clear : '.clearButton' // Button for clearing the canvas
-  , typeIt : '.typeIt a' // Button to trigger name typing actions (current by default)
-  , drawIt : '.drawIt a' // Button to trigger name drawing actions
-  , typeItDesc : '.typeItDesc' // The description for TypeIt actions
-  , drawItDesc : '.drawItDesc' // The description for DrawIt actions (hidden by default)
-  , output : '.output' // The hidden input field for remembering line coordinates
-  , currentClass : 'current' // The class used to mark items as being currently active
-  , validateFields : true // Whether the name, draw fields should be validated
-  , errorClass : 'error' // The class applied to the new error Html element
-  , errorMessage : 'Please enter your name' // The error message displayed on invalid submission
-  , errorMessageDraw : 'Please sign the document' // The error message displayed when drawOnly and no signature is drawn
-  , onBeforeValidate : null // Pass a callback to be used instead of the built-in function
-  , onFormError : null // Pass a callback to be used instead of the built-in function
-  , onDraw : null // Pass a callback to be used to capture the drawing process
-  , onDrawEnd : null // Pass a callback to be exectued after the drawing process
-  , compress : false // compress output using base62encode with '-' and ':' as separators
-}
+
+  /**
+   * Expose the defaults so they can be overwritten for multiple instances
+   *
+   * @type {Object}
+   */
+  $.fn.signaturePad.defaults = {
+    defaultAction : 'typeIt' // What action should be highlighted first: typeIt or drawIt
+    , displayOnly : false // Initialize canvas for signature display only; ignore buttons and inputs
+    , drawOnly : false // Whether the to allow a typed signature or not
+    , canvas : 'canvas' // Selector for selecting the canvas element
+    , sig : '.sig' // Parts of the signature form that require Javascript (hidden by default)
+    , sigNav : '.sigNav' // The TypeIt/DrawIt navigation (hidden by default)
+    , bgColour : '#ffffff' // The colour fill for the background of the canvas; or transparent
+    , penColour : '#145394' // Colour of the drawing ink
+    , penWidth : 2 // Thickness of the pen
+    , penCap : 'round' // Determines how the end points of each line are drawn (values: 'butt', 'round', 'square')
+    , lineColour : '#ccc' // Colour of the signature line
+    , lineWidth : 2 // Thickness of the signature line
+    , lineMargin : 5 // Margin on right and left of signature line
+    , lineTop : 35 // Distance to draw the line from the top
+    , name : '.name' // The input field for typing a name
+    , typed : '.typed' // The Html element to accept the printed name
+    , clear : '.clearButton' // Button for clearing the canvas
+    , typeIt : '.typeIt a' // Button to trigger name typing actions (current by default)
+    , drawIt : '.drawIt a' // Button to trigger name drawing actions
+    , typeItDesc : '.typeItDesc' // The description for TypeIt actions
+    , drawItDesc : '.drawItDesc' // The description for DrawIt actions (hidden by default)
+    , output : '.output' // The hidden input field for remembering line coordinates
+    , currentClass : 'current' // The class used to mark items as being currently active
+    , validateFields : true // Whether the name, draw fields should be validated
+    , errorClass : 'error' // The class applied to the new error Html element
+    , errorMessage : 'Please enter your name' // The error message displayed on invalid submission
+    , errorMessageDraw : 'Please sign the document' // The error message displayed when drawOnly and no signature is drawn
+    , onBeforeValidate : null // Pass a callback to be used instead of the built-in function
+    , onFormError : null // Pass a callback to be used instead of the built-in function
+    , onDraw : null // Pass a callback to be used to capture the drawing process
+    , onDrawEnd : null // Pass a callback to be exectued after the drawing process
+    , compress : true // compress output using base62encode with '-' and ':' as separators
+  }
 
 }(jQuery))
