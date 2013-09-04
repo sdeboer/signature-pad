@@ -1,3 +1,4 @@
+var testPaths;
 /**
  * Usage for accepting signatures:
  *  $('.sigPad').signaturePad()
@@ -231,15 +232,19 @@ function SignaturePad (selector, options) {
   /**
    */
   function compress () {
-    var paths = '', path
+    var paths, path
+
+    paths = convertToCharacter(settings.penWidth)
+    + convertToCharacter(element.width)
+
     for (path in output) {
       path = output[path]
       if (typeof path == 'object') {
         paths = paths
-        + convertToCharCode(path.lx)
-        + convertToCharCode(path.ly)
-        + convertToCharCode(path.mx)
-        + convertToCharCode(path.my)
+        + convertToCharacter(path.lx)
+        + convertToCharacter(path.ly)
+        + convertToCharacter(path.mx)
+        + convertToCharacter(path.my)
       }
     }
 
@@ -248,24 +253,50 @@ function SignaturePad (selector, options) {
 
   function decompress (src) {
     var paths = [], i, l = src.length
+    , origHeight, origWidth, origPen
+    , modifier
+    , newPen
 
-    for (i = 0, l = src.length; i < l; i = i + 4) {
+    origPen = convertFromCharacter(src, 0)
+    origWidth = convertFromCharacter(src, 1)
+
+    // Aspect ratio should remain constant, so we don't bother with height
+    modifier = element.width / origWidth
+    if (!modifier) {
+      throw "There is a problem with the height/width of the new canvas compared to the original."
+      + " (ow: " + origWidth
+      + ", oh: " + origHeight
+      + ", nw: " + element.width
+      + ", nh: " + element.height
+      + ")"
+    }
+
+    // Pen shouldn't scale quite as fast as the drawing
+    newPen = origPen * ((0.8 * (modifier - 1) ) + 1 )
+
+    if (newPen < 0.5) {
+      throw "Too small a canvas for signature representation (op: " + origPen + ", np: " + newPen + ")"
+    }
+    newPen = Math.min( Math.round(newPen), 1)
+
+    for (i = 2, l = src.length; i < l; i = i + 4) {
       paths.push({
-          lx: convertFromCharCode(src, i)
-          , ly: convertFromCharCode(src, i + 1)
-          , mx: convertFromCharCode(src, i + 2)
-          , my: convertFromCharCode(src, i + 3)
+          lx: convertFromCharacter(src, i, modifier)
+          , ly: convertFromCharacter(src, i + 1, modifier)
+          , mx: convertFromCharacter(src, i + 2, modifier)
+          , my: convertFromCharacter(src, i + 3, modifier)
       })
     }
     return paths
   }
 
-  function convertToCharCode(num) {
+  function convertToCharacter(num) {
     return String.fromCharCode( parseInt(num.toString(), 10) + 65)
   }
 
-  function convertFromCharCode(str, pos) {
-    return str.charCodeAt(pos) - 65
+  function convertFromCharacter(str, pos, modifier) {
+    modifier = modifier || 1
+    return Math.round( (str.charCodeAt(pos) - 65) * modifier )
   }
 
   /**
@@ -303,6 +334,7 @@ function SignaturePad (selector, options) {
     if (elem && elem.length > 0) {
       if (settings.compress) {
         val = compress(output)
+        testPaths = val
       } else {
         val = JSON.stringify(output)
       }
