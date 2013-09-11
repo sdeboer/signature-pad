@@ -230,6 +230,17 @@ function SignaturePad (selector, options) {
   }
 
   /**
+   * Converts the data to a much more efficient form and saves the original width
+   * and pen size of the canvas.  Changes the array of objects from
+   * [{lx: x, ly: y, mx: m, my: n}, ...] into [x, y, m, n, ...].
+   *
+   * Then it prepends the pen width and canvas height.
+   *
+   * Then it converts each of those numbers into a charCode in a long string.
+   *
+   * NOTE:  All handlers of this string MUST BE utf-8 capable or this will
+   * fail miserably.  Note that "cut-and-paste" of this string is pretty much
+   * guaranteed to fail.
    */
   function compress () {
     var paths, path
@@ -251,6 +262,14 @@ function SignaturePad (selector, options) {
     return paths
   }
 
+  /**
+   * Undoes the compression algorithm for a "new" size canvas.
+   * The assumption here is that if you are decompressing a string
+   * you are then displaying a signature for evidentiary reasons
+   * and the new canvas could be a different size from the original.
+   * We'll scale the pen size as well, but not quite as fast as the canvas
+   * as it looks funny then.
+   */
   function decompress (src) {
     var paths = [], i, l = src.length
     , origHeight, origWidth, origPen
@@ -260,15 +279,10 @@ function SignaturePad (selector, options) {
     origPen = convertFromCharacter(src, 0)
     origWidth = convertFromCharacter(src, 1)
 
-    // Aspect ratio should remain constant, so we don't bother with height
     modifier = element.width / origWidth
     if (!modifier) {
       throw "There is a problem with the height/width of the new canvas compared to the original."
-      + " (ow: " + origWidth
-      + ", oh: " + origHeight
-      + ", nw: " + element.width
-      + ", nh: " + element.height
-      + ")"
+      + " (ow: " + origWidth + ", nw: " + element.width + ")"
     }
 
     // Pen shouldn't scale quite as fast as the drawing
