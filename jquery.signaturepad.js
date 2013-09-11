@@ -243,10 +243,7 @@ function SignaturePad (selector, options) {
    * guaranteed to fail.
    */
   function compress () {
-    var paths, path
-
-    paths = convertToCharacter(settings.penWidth)
-    + convertToCharacter(element.width)
+    var paths, path = ''
 
     for (path in output) {
       path = output[path]
@@ -258,6 +255,11 @@ function SignaturePad (selector, options) {
         + convertToCharacter(path.my)
       }
     }
+
+		// If there are no paths then we don't want to have any value here
+		if(paths) {
+			paths = convertToCharacter(settings.penWidth) + convertToCharacter(element.width) + paths
+		}
 
     return paths
   }
