@@ -1,4 +1,3 @@
-var testPaths;
 /**
  * Usage for accepting signatures:
  *  $('.sigPad').signaturePad()
@@ -243,7 +242,7 @@ function SignaturePad (selector, options) {
    * guaranteed to fail.
    */
   function compress () {
-    var paths, path = ''
+    var paths = '', path = ''
 
     for (path in output) {
       path = output[path]
@@ -279,6 +278,12 @@ function SignaturePad (selector, options) {
     , newPen
 
     origPen = convertFromCharacter(src, 0)
+
+		// In case this isn't actually compressed content.
+		// Since '[' is ascii 91 it should be safe to check since
+		// our encoding starts from 'a' / 97
+		if(origPen === '[') return src
+
     origWidth = convertFromCharacter(src, 1)
 
     modifier = element.width / origWidth
@@ -307,12 +312,12 @@ function SignaturePad (selector, options) {
   }
 
   function convertToCharacter(num) {
-    return String.fromCharCode( parseInt(num.toString(), 10) + 65)
+    return String.fromCharCode( parseInt(num.toString(), 10) + 91)
   }
 
   function convertFromCharacter(str, pos, modifier) {
     modifier = modifier || 1
-    return Math.round( (str.charCodeAt(pos) - 65) * modifier )
+    return Math.round( (str.charCodeAt(pos) - 91) * modifier )
   }
 
   /**
@@ -350,7 +355,6 @@ function SignaturePad (selector, options) {
     if (elem && elem.length > 0) {
       if (settings.compress) {
         val = compress(output)
-        testPaths = val
       } else {
         val = JSON.stringify(output)
       }
@@ -691,6 +695,10 @@ function SignaturePad (selector, options) {
       onFormError.apply(self, onErrorArguments)
     }
 
+		if(valid && settings.onFormSuccess && typeof settings.onFormSuccess === 'function') {
+			settings.onFormSuccess.apply(self, onBeforeArguments);
+		}
+
     return valid
   }
 
@@ -960,6 +968,7 @@ function SignaturePad (selector, options) {
     , onFormError : null // Pass a callback to be used instead of the built-in function
     , onDraw : null // Pass a callback to be used to capture the drawing process
     , onDrawEnd : null // Pass a callback to be exectued after the drawing process
+		, onFormSuccess : null // Pass a callback to be used when the signature is complete
     , compress : true // compress output using base62encode with '-' and ':' as separators
   }
 
